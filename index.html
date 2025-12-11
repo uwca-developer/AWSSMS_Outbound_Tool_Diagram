@@ -109,7 +109,7 @@ graph TB
     subgraph "Step Functions Orchestrator"
         EB -->|At Scheduled Time| SF[SMSCampaignOrchestrator<br/>State Machine]
         SF -->|1. Load CSV| LoadCSV[Load & Parse CSV<br/>from S3]
-        LoadCSV -->|2. Create Batches| Map[Map State<br/>Process Batches<br/>MaxConcurrency: As of 12/11/25, this is 3 (pre-quota increase)]
+        LoadCSV -->|2. Create Batches| Map[Map State<br/>Process Batches<br/>MaxConcurrency: 2]
         Map -->|50 contacts/batch| Process
         Map -->|3. Mark Complete| Complete[Mark Campaign<br/>Complete]
     end
@@ -167,21 +167,6 @@ graph TB
     style S3Fail fill:#ffccbc
             </div>
         </div>
-
-        <h2>Technology Stack</h2>
-        <div class="key-features">
-            <ul>
-                <li><strong>Lambda Runtime:</strong> Python 3.13</li>
-                <li><strong>AWS Services:</strong> Lambda, Step Functions, EventBridge Scheduler, S3, DynamoDB, Connect, ConnectParticipant, End User Messaging (Pinpoint SMS Voice V2)</li>
-                <li><strong>Orchestration:</strong> AWS Step Functions with Map state (MaxConcurrency: as of 12/11/25, 3. Will increase this our quota increase request is granted)</li>
-                <li><strong>Storage:</strong> S3 (CSVs, failed contacts), DynamoDB (campaigns, sessions, customer data)</li>
-                <li><strong>Messaging:</strong> 211211 shortcode via End User Messaging</li>
-                <li><strong>Session Management:</strong> 7-day TTL on session records</li>
-                <li><strong>Batch Size:</strong> 50 contacts per batch</li>
-                <li><strong>Rate Limiting:</strong> Connect StartChatContact: 50 TPS, EUM SendTextMessage: 100 TPS</li>
-            </ul>
-        </div>
-
     </div>
 
     <script>
