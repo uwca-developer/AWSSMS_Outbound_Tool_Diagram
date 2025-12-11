@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SMS Campaign Architecture - United Ways of California</title>
+    <title>SMS Systems Diagrams - United Ways of California</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         body {
@@ -82,10 +82,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>SMS Campaign Architecture</h1>
-        <p style="color: #666; font-size: 14px; margin-top: -10px;">United Ways of California - Switcher-Based Campaign System</p>
+        <h1>SMS Systems Diagrams</h1>
 
-        <h2>System Overview</h2>
+        <h2>Outbound Blast (SMS Campaign) Architecture</h2>
         <div class="diagram-wrapper">
             <div class="mermaid">
 graph TB
@@ -165,6 +164,84 @@ graph TB
     style Valid fill:#fce4ec
     style Sessions fill:#fce4ec
     style S3Fail fill:#ffccbc
+            </div>
+        </div>
+
+        <h2>Outbound Blast (SMS Campaign) Architecture</h2>
+        <h2>System Overview</h2>
+        <div class="diagram-wrapper">
+            <div class="mermaid">
+graph TB
+    subgraph "User Interface"
+        UI[Transfer/Restart UI]
+        UI -->|Select Operation| Mode{Mode Selection}
+        Mode -->|Transfer| TransferUI[Select Instance & Flow]
+        Mode -->|Restart| RestartUI[Confirm Restart]
+        TransferUI -->|Single/CSV| Input1[Phone Number Input]
+        RestartUI -->|Single/CSV| Input2[Phone Number Input]
+    end
+    subgraph "Lambda Processor"
+        Input1 -->|HTTP POST| Proc[TransferRestartProcessor]
+        Input2 -->|HTTP POST| Proc
+        Proc -->|list_instances| ListInst[List Connect Instances<br/>Exclude Keywords]
+        Proc -->|list_flows| ListFlows[List Active Flows<br/>Filter Test Flows]
+        Proc -->|process_transfer| Transfer[Transfer Operation]
+        Proc -->|process_restart| Restart[Restart Operation]
+    end
+    subgraph "Transfer Flow - Switcher Architecture"
+        Transfer -->|Parse Input| ParseT[Parse Phone Numbers<br/>Single or CSV]
+        ParseT -->|For each contact| CheckT{Existing<br/>Session?}
+        CheckT -->|Yes| TermT[Stop Contact<br/>Clean Session Records]
+        CheckT -->|No| CreateT
+        TermT -->|After cleanup| CreateT[Start Chat Contact<br/>No Phone ARN needed]
+        CreateT -->|1. Create Session| ChatT[Connect Chat Contact<br/>StartChatContact API]
+        ChatT -->|2. Start Streaming| StreamT[Route to SNS Topic]
+        StreamT -->|3. Get Credentials| PartT[Create Participant Connection]
+        PartT -->|4. Store State| TablesT
+    end
+    subgraph "Restart Flow - Complete Reset"
+        Restart -->|Parse Input| ParseR[Parse Phone Numbers<br/>Single or CSV]
+        ParseR -->|For each contact| CleanR[Clean Up All Records]
+        CleanR -->|1. Delete| ValidR[(Delete from<br/>ValidatedCustomers)]
+        CleanR -->|2. Delete| SessionR[(Delete from<br/>ConnectChatSessions)]
+        CleanR -->|3. Delete| LexR[Delete Lex Sessions<br/>eng & esp]
+        LexR -->|4. Invoke| Router[SMSRouter Lambda<br/>Fake SNS Event]
+        Router -->|Keyword: restart| Process[Full Onboarding Flow]
+        Process -->|Welcome Message| Welcome[Send Welcome via 211211]
+        Welcome -->|Lex for ZIP| LexBot[Lex Bot Interaction]
+        LexBot -->|Route to Instance| Route[Create New Session]
+    end
+    subgraph "Session State Management - Both Operations"
+        TablesT -->|Update| Valid[(ValidatedCustomers)]
+        TablesT -->|Create| Sessions[(ConnectChatSessions)]
+        Valid -.->|phone, language,<br/>chat_status = connected,<br/>connectArn, connectFlowId,<br/>connectInstance| ValidMeta[Transfer Metadata]
+        Sessions -.->|contactId, vendorId,<br/>participantId, participantToken,<br/>connectionCredentials,<br/>datetime, expiration| SessionMeta[Participant Data]
+    end
+    subgraph "Cross-Account Support"
+        ListFlows -->|Check Role ARN| CrossAcct{Cross-Account<br/>Instance?}
+        CrossAcct -->|Yes| STS[AssumeRole via STS<br/>Get Temp Credentials]
+        CrossAcct -->|No| SameAcct[Use Default Credentials]
+        STS -->|Use Credentials| ConnectAPI[Connect API Calls]
+        SameAcct -->|Use Credentials| ConnectAPI
+    end
+    subgraph "Message Delivery - Transfer Only"
+        Route -->|Flow Executes| FlowExec[Connect Flow Sends Messages]
+        FlowExec -->|To SNS| OutSNS[SNS Topic]
+        OutSNS -->|Trigger| OutLambda[Outbound Handler]
+        OutLambda -->|Send via EUM| Short[211211 Shortcode]
+        Short -->|SMS| Customer[Customer Phone]
+    end
+    style UI fill:#e3f2fd
+    style Proc fill:#fff3e0
+    style Mode fill:#f3e5f5
+    style CheckT fill:#ffebee
+    style CreateT fill:#e8f5e9
+    style CleanR fill:#ffccbc
+    style Router fill:#e1f5fe
+    style Valid fill:#fce4ec
+    style Sessions fill:#fce4ec
+    style Short fill:#c8e6c9
+    style Customer fill:#fff9c4
             </div>
         </div>
     </div>
